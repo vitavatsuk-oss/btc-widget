@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>BTC/USDT</title>
+
+<!--
+  ============================================================
+  BTC/USDT Ticker — สำหรับ iframe widget ของ HYTE Y70 Touch
+  ============================================================
+  ไฟล์เดียวจบ ไม่มี dependency ภายนอก
+  ข้อมูล: Binance Global — WebSocket (หลัก) / REST (สำรอง)
+
+  ปรับแต่งได้ที่ block CONFIG ด้านล่าง (บรรทัด ~180)
+
+  Layout ปรับตัวเองอัตโนมัติตามขนาดช่อง widget:
+    - สูง < 220px  → โหมด mini    (ราคา + % บรรทัดเดียว)
+    - สูง < 560px  → โหมด compact (ราคา + % + high/low)
+    - สูง ≥ 560px  → โหมด full    (เพิ่ม sparkline 24 ชม. + volume)
+  จึงไม่ต้องเลือกว่าจะวางช่องเล็กหรือเต็มความสูงจอตั้งแต่แรก
+  ============================================================
+-->
+
+<style>
+  :root{
+    --up:   #7CFF9B;   /* สีขาขึ้น */
+    --down: #FF6B6B;   /* สีขาลง */
+    --fg:   #F2F5F3;   /* สีตัวอักษรหลัก */
+    --dim:  #6B7A72;   /* สีตัวอักษรรอง */
+    --bg:   #000000;   /* พื้นหลัง — ดำสนิทเพื่อกลืนกับขอบจอ */
+    --accent: var(--up);
+  }
+
+  *{ margin:0; padding:0; box-sizing:border-box; }
+
+  html,body{
+    width:100%; height:100%;
+    background:var(--bg);
+    overflow:hidden;
+    -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  body{
+    font-family:"Cascadia Mono","SF Mono","Segoe UI",system-ui,-apple-system,sans-serif;
+    font-variant-numeric:tabular-nums;   /* สำคัญ: กันตัวเลขขยับซ้ายขวาตอนอัปเดต */
+    font-feature-settings:"tnum" 1;
+    color:var(--fg);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+
+  #wrap{
+    width:100%; height:100%;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    gap:0.5rem;
+    padding:1rem;
+    text-align:center;
+  }
+
+  /* ---------- หัวข้อ ---------- */
+  #pair{
+    font-size:0.95rem; letter-spacing:0.22em; font-weight:600;
+    color:var(--dim); text-transform:uppercase;
+    display:flex; align-items:center; gap:0.5em;
+  }
+  #dot{
+    width:0.42em; height:0.42em; border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 0.6em var(--accent);
+    transition:background .3s, box-shadow .3s, opacity .3s;
+  }
+  body[data-conn="down"] #dot{ background:var(--dim); box-shadow:none; opacity:.5; }
+  body[data-conn="live"] #dot{ animation:pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.35} }
+
+  /* ---------- ราคา ---------- */
+  #price{
+    font-size:3.6rem; font-weight:700; line-height:1;
+    letter-spacing:-0.02em;
+    transition:color .45s ease;
+  }
+  #price.flash-up{   color:var(--up);   }
+  #price.flash-down{ color:var(--down); }
+
+  /* ---------- % เปลี่ยนแปลง ---------- */
+  #change{
+    font-size:1.35rem; font-weight:600;
+    color:var(--accent);
+    display:flex; align-items:baseline; gap:0.45em;
+    justify-content:center;
+  }
+  #change .abs{ font-size:0.72em; opacity:.6; font-weight:500; }
+
+  /* ---------- แถว high / low ---------- */
+  #hl{
+    display:flex; gap:1.6rem; justify-content:center;
+    font-size:0.9rem; color:var(--dim); font-weight:500;
+    margin-top:0.3rem;
+  }
+  #hl b{ color:var(--fg); font-weight:600; display:block; font-size:1.12em; margin-top:0.25em; }
+  #hl span{ letter-spacing:0.12em; text-transform:uppercase; font-size:0.82em; }
+
+  /* ---------- sparkline ---------- */
+  #spark{
+    width:100%; max-width:100%; height:5rem;
+    margin-top:0.9rem; display:block; overflow:visible;
+  }
+  #sparkLine{ fill:none; stroke:var(--accent); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+  #sparkFill{ fill:var(--accent); opacity:.11; }
+
+  /* ---------- volume + เวลา ---------- */
+  #meta{
+    font-size:0.72rem; color:var(--dim); letter-spacing:0.14em;
+    text-transform:uppercase; margin-top:0.9rem; line-height:1.9;
+  }
+
+  /* ---------- โหมดตามสัดส่วนของช่อง widget ---------- */
+
+  /* mini = 4x1 : ราคา + % เท่านั้น */
+  body[data-mode="mini"] #hl,
+  body[data-mode="mini"] #spark,
+  body[data-mode="mini"] #meta,
+  body[data-mode="mini"] #pair{ display:none; }
+  body[data-mode="mini"] #wrap{ gap:0.2rem; padding:0.4rem; }
+  body[data-mode="mini"] #price{ font-size:3.2rem; }
+  body[data-mode="mini"] #change{ font-size:1.15rem; }
+
+  /* wide = 4x2 : ข้อมูลครบ (มี sparkline) แต่บีบแนวตั้ง */
+  body[data-mode="wide"] #meta{ display:none; }
+  body[data-mode="wide"] #wrap{ gap:0.32rem; padding:0.7rem 1rem; }
+  body[data-mode="wide"] #pair{ font-size:0.8rem; letter-spacing:0.2em; }
+  body[data-mode="wide"] #price{ font-size:3.4rem; }
+  body[data-mode="wide"] #change{ font-size:1.25rem; }
+  body[data-mode="wide"] #hl{ font-size:0.8rem; gap:1.4rem; margin-top:0.05rem; }
+  body[data-mode="wide"] #spark{ height:2.6rem; margin-top:0.45rem; }
+
+  /* full = 4x4 : เต็มรูปแบบ */
+  body[data-mode="full"] #wrap{ gap:0.5rem; }
+
+  /* ---------- สถานะโหลด / error ---------- */
+  body[data-state="loading"] #price{ color:var(--dim); }
+  body[data-state="stale"]   #wrap{ opacity:.45; transition:opacity .6s; }
+  #err{
+    position:absolute; bottom:0.7rem; left:0; right:0;
+    font-size:0.68rem; color:var(--down); letter-spacing:0.1em;
+    text-transform:uppercase; display:none;
+  }
+  body[data-state="stale"] #err{ display:block; }
+</style>
+</head>
+
+<body data-mode="full" data-state="loading" data-conn="down">
+
+<div id="wrap">
+  <div id="pair"><span id="dot"></span><span id="pairName">BTC / USDT</span></div>
+
+  <div id="price">—</div>
+
+  <div id="change">
+    <span id="chgPct">—</span>
+    <span class="abs" id="chgAbs"></span>
+  </div>
+
+  <div id="hl">
+    <div><span>24h High</span><b id="high">—</b></div>
+    <div><span>24h Low</span><b id="low">—</b></div>
+  </div>
+
+  <svg id="spark" viewBox="0 0 300 100" preserveAspectRatio="none">
+    <path id="sparkFill" d=""></path>
+    <path id="sparkLine" d=""></path>
+  </svg>
+
+  <div id="meta">
+    <div id="vol">—</div>
+    <div id="updated">—</div>
+  </div>
+</div>
+
+<div id="err">Connection lost — showing last known price</div>
+
+<script>
+/* ============================================================
+   CONFIG — แก้ค่าตรงนี้ได้ตามต้องการ
+   ============================================================ */
+const CONFIG = {
+  symbol:        "BTCUSDT",     // คู่เหรียญบน Binance Spot
+  displayName:   "BTC / USDT",  // ข้อความหัวข้อ
+  restIntervalMs: 10000,        // ความถี่ polling สำรอง (มิลลิวินาที) — อย่าต่ำกว่า 5000
+  sparkIntervalMs: 300000,      // ความถี่รีเฟรช sparkline = 5 นาที
+  sparkInterval: "15m",         // แท่งเทียนของ sparkline
+  sparkLimit:    96,            // 96 แท่ง x 15 นาที = 24 ชั่วโมง
+  timeZone:      "Asia/Bangkok",
+  locale:        "en-US",
+  staleAfterMs:  60000,         // ถ้าไม่มีข้อมูลใหม่เกินเท่านี้ = ขึ้นสถานะ stale
+  decimals:      0              // ทศนิยมของราคา (0 = $118,432 / 2 = $118,432.51)
+};
+/* ========================================================== */
+
+const REST_BASE = "https://api.binance.com/api/v3";
+const WS_URL    = "wss://stream.binance.com:9443/ws/" +
+                  CONFIG.symbol.toLowerCase() + "@ticker";
+
+const $ = id => document.getElementById(id);
+const body = document.body;
+
+let lastPrice = null;
+let lastUpdate = 0;
+let ws = null;
+let restTimer = null;
+let wsAlive = false;
+
+$("pairName").textContent = CONFIG.displayName;
+
+/* ---------- ฟอร์แมตตัวเลข ---------- */
+const fmtPrice = n => "$" + Number(n).toLocaleString(CONFIG.locale, {
+  minimumFractionDigits: CONFIG.decimals,
+  maximumFractionDigits: CONFIG.decimals
+});
+
+const fmtCompact = n => {
+  n = Number(n);
+  if (n >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
+  if (n >= 1e6) return "$" + (n / 1e6).toFixed(1) + "M";
+  if (n >= 1e3) return "$" + (n / 1e3).toFixed(0) + "K";
+  return "$" + n.toFixed(0);
+};
+
+const fmtTime = d => d.toLocaleTimeString("en-GB", {
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+  timeZone: CONFIG.timeZone
+});
+
+/* ---------- อัปเดตหน้าจอ ---------- */
+function render(d) {
+  // d = { price, changePct, changeAbs, high, low, quoteVol }
+  const price = Number(d.price);
+  const pct   = Number(d.changePct);
+  const up    = pct >= 0;
+
+  // สลับสี accent ทั้งหน้าตาม % 24 ชม.
+  document.documentElement.style.setProperty("--accent", up ? "var(--up)" : "var(--down)");
+
+  // flash เมื่อราคาขยับ
+  if (lastPrice !== null && price !== lastPrice) {
+    const el = $("price");
+    const cls = price > lastPrice ? "flash-up" : "flash-down";
+    el.classList.remove("flash-up", "flash-down");
+    void el.offsetWidth;               // บังคับ reflow ให้ animation เริ่มใหม่
+    el.classList.add(cls);
+    setTimeout(() => el.classList.remove(cls), 500);
+  }
+  lastPrice = price;
+
+  $("price").textContent  = fmtPrice(price);
+  $("chgPct").textContent = (up ? "▲ +" : "▼ ") + pct.toFixed(2) + "%";
+  if (d.changeAbs !== undefined) {
+    $("chgAbs").textContent = (up ? "+" : "") +
+      Number(d.changeAbs).toLocaleString(CONFIG.locale, { maximumFractionDigits: 0 });
+  }
+  if (d.high) $("high").textContent = fmtPrice(d.high);
+  if (d.low)  $("low").textContent  = fmtPrice(d.low);
+  if (d.quoteVol) $("vol").textContent = "Vol 24h  " + fmtCompact(d.quoteVol);
+
+  $("updated").textContent = "Updated " + fmtTime(new Date()) + " ICT";
+
+  lastUpdate = Date.now();
+  body.dataset.state = "ok";
+}
+
+/* ---------- REST: ดึงข้อมูล 24 ชม. ---------- */
+async function fetchTicker() {
+  try {
+    const r = await fetch(`${REST_BASE}/ticker/24hr?symbol=${CONFIG.symbol}`, { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    render({
+      price:     j.lastPrice,
+      changePct: j.priceChangePercent,
+      changeAbs: j.priceChange,
+      high:      j.highPrice,
+      low:       j.lowPrice,
+      quoteVol:  j.quoteVolume
+    });
+  } catch (e) {
+    checkStale();
+  }
+}
+
+/* ---------- WebSocket: real-time push ---------- */
+function connectWS() {
+  try { ws && ws.close(); } catch (e) {}
+  try {
+    ws = new WebSocket(WS_URL);
+  } catch (e) {
+    startRestPolling();
+    return;
+  }
+
+  ws.onopen = () => {
+    wsAlive = true;
+    body.dataset.conn = "live";
+    stopRestPolling();                 // มี WS แล้วไม่ต้อง poll
+  };
+
+  ws.onmessage = ev => {
+    try {
+      const j = JSON.parse(ev.data);
+      render({
+        price:     j.c,   // last price
+        changePct: j.P,   // 24h change %
+        changeAbs: j.p,   // 24h change (absolute)
+        high:      j.h,
+        low:       j.l,
+        quoteVol:  j.q
+      });
+    } catch (e) {}
+  };
+
+  ws.onclose = () => {
+    wsAlive = false;
+    body.dataset.conn = "down";
+    startRestPolling();                // ตกไปใช้ REST
+    setTimeout(connectWS, 8000);       // แล้วลอง WS ใหม่
+  };
+
+  ws.onerror = () => { try { ws.close(); } catch (e) {} };
+}
+
+function startRestPolling() {
+  if (restTimer) return;
+  fetchTicker();
+  restTimer = setInterval(fetchTicker, CONFIG.restIntervalMs);
+}
+function stopRestPolling() {
+  if (restTimer) { clearInterval(restTimer); restTimer = null; }
+}
+
+/* ---------- ตรวจข้อมูลค้าง ---------- */
+function checkStale() {
+  if (lastUpdate && Date.now() - lastUpdate > CONFIG.staleAfterMs) {
+    body.dataset.state = "stale";
+  }
+}
+setInterval(checkStale, 5000);
+
+/* ---------- Sparkline 24 ชม. ---------- */
+async function fetchSpark() {
+  if (body.dataset.mode === "mini") return;   // โหมด mini ไม่ได้ใช้ sparkline
+  try {
+    const url = `${REST_BASE}/klines?symbol=${CONFIG.symbol}` +
+                `&interval=${CONFIG.sparkInterval}&limit=${CONFIG.sparkLimit}`;
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) return;
+    const rows = await r.json();
+    const closes = rows.map(k => Number(k[4]));
+    drawSpark(closes);
+  } catch (e) {}
+}
+
+function drawSpark(vals) {
+  if (!vals.length) return;
+  const W = 300, H = 100, PAD = 6;
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = (max - min) || 1;
+  const pts = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * W;
+    const y = PAD + (1 - (v - min) / range) * (H - PAD * 2);
+    return [x, y];
+  });
+  const line = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  $("sparkLine").setAttribute("d", line);
+  $("sparkFill").setAttribute("d", line + ` L${W} ${H} L0 ${H} Z`);
+}
+
+/* ---------- ปรับ layout ตามขนาดช่อง widget ---------- */
+function fit() {
+  const w = window.innerWidth || document.documentElement.clientWidth;
+  const h = window.innerHeight || document.documentElement.clientHeight;
+  const ratio = h / w;                       // เลือกโหมดจากสัดส่วน ไม่ใช่ px แบบตายตัว
+
+  //  4x1 ≈ 0.26  |  4x2 ≈ 0.52  |  4x4 ≈ 1.07
+  const mode = ratio < 0.30 ? "mini"
+             : ratio < 0.80 ? "wide"
+             :                "full";
+
+  // base font คิดจาก "ทั้งกว้างและสูง" — ตัวหารคือจำนวน rem ที่ layout นั้นกินพอดี
+  const base = mode === "mini" ? Math.min(w / 16, h / 5.5)
+             : mode === "wide" ? Math.min(w / 26, h / 13.5)
+             :                   Math.min(w / 20, h / 26);
+
+  document.documentElement.style.fontSize = Math.max(5, Math.min(64, base)) + "px";
+
+  const prev = body.dataset.mode;
+  body.dataset.mode = mode;
+  if (prev === "mini" && mode !== "mini") fetchSpark();
+}
+window.addEventListener("resize", fit);
+if (window.ResizeObserver) new ResizeObserver(fit).observe(document.documentElement);
+
+/* ---------- แตะจอเพื่อรีเฟรชทันที ---------- */
+document.addEventListener("click", () => { fetchTicker(); fetchSpark(); });
+
+/* ---------- เริ่มทำงาน ---------- */
+fit();
+fetchTicker();                                   // ยิง REST ครั้งแรกให้ขึ้นเลข high/low/vol ทันที
+connectWS();                                     // แล้วต่อ WS สำหรับ real-time
+fetchSpark();
+setInterval(fetchSpark, CONFIG.sparkIntervalMs);
+
+// กันกรณี WS ต่อไม่ติดเงียบ ๆ ภายใน 12 วินาที
+setTimeout(() => { if (!wsAlive) startRestPolling(); }, 12000);
+</script>
+</body>
+</html>
