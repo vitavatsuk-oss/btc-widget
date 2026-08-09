@@ -35,6 +35,10 @@
     --dim:  #6B7A72;
     --label: rgba(255,255,255,.86);   /* สี label ทั้งหมด — ขาวเพื่อให้อ่านจากระยะไกล */
 
+    /* ความจางของสกุลที่วันที่เก่ากว่าตัวอื่น (เช่น TWD)
+       1 = ไม่หรี่เลย · 0.8 = หรี่พอสังเกต · 0.5 = จางมาก           */
+    --lag-opacity: .82;
+
     /* ---- พื้นหลัง ----
        transparent      = ทะลุเห็น wallpaper เต็ม ๆ
        rgba(0,0,0,0.35) = ทินท์ดำจาง (ค่าปัจจุบัน)
@@ -153,18 +157,26 @@
     display:grid; grid-template-columns:repeat(3,1fr);
     gap:0.35rem 0.6rem;
   }
-  .fx span{
-    display:block; font-size:0.72rem; letter-spacing:0.1em; font-weight:700;
-    color:var(--label); text-transform:uppercase; opacity:.8;
+  /* หนึ่งสกุล = หนึ่งบรรทัด: label ซ้าย ตัวเลขขวา
+     min-width 5ch + จัดชิดขวา -> จุดทศนิยมตรงกันทุกแถว (ฟอนต์ monospace) */
+  .fx{
+    display:flex; align-items:baseline; justify-content:space-between; gap:0.6rem;
   }
-  .fx b{ display:block; font-size:1.3rem; font-weight:700; color:#fff; margin-top:0.05em; }
+  .fx span{
+    font-size:0.78rem; letter-spacing:0.08em; font-weight:700;
+    color:var(--label); text-transform:uppercase; opacity:.8; white-space:nowrap;
+  }
+  .fx b{
+    font-size:1.3rem; font-weight:700; color:#fff;
+    min-width:5ch; text-align:right;
+  }
   .fx.miss b{ color:var(--dim); font-weight:500; }
-  .fx.lag{ opacity:.5; }              /* เรตของสกุลนี้เก่ากว่าตัวอื่น */
+  .fx.lag{ opacity:var(--lag-opacity); }   /* เรตของสกุลนี้เก่ากว่าตัวอื่น */
 
-  /* คอลัมน์เดียว = มีที่เหลือแนวตั้ง เว้นระยะให้หายใจและขยายตัวเลขได้อีก */
-  #fxGrid[data-cols="1"]{ gap:0.85rem 0; }
-  #fxGrid[data-cols="1"] .fx span{ font-size:0.66rem; }
-  #fxGrid[data-cols="1"] .fx b{ font-size:1.6rem; }
+  /* คอลัมน์เดียว = มีที่เหลือแนวนอน ขยายตัวอักษรได้อีก */
+  #fxGrid[data-cols="1"]{ gap:0.5rem 0; }
+  #fxGrid[data-cols="1"] .fx span{ font-size:0.88rem; }
+  #fxGrid[data-cols="1"] .fx b{ font-size:1.55rem; }
 
   #fxMeta{
     font-size:0.62rem; letter-spacing:0.1em; font-weight:700;
@@ -198,6 +210,12 @@
     background:linear-gradient(180deg,transparent,rgba(255,255,255,.16),transparent);
   }
   body[data-content="split"] #fxMeta{ font-size:0.55rem; margin-top:0.5rem; }
+
+  /* ค่าเงินเตี้ยลงแล้ว -> ฝั่ง crypto ขยายมากินที่ว่างแนวตั้งได้ */
+  body[data-content="split"] #price{ font-size:4rem; }
+  body[data-content="split"] #change{ font-size:1.45rem; }
+  body[data-content="split"] #spark{ height:5.4rem; }
+  body[data-content="split"] #crypto{ gap:0.5rem; }
 
   /* ================= โหมด ================= */
   body[data-mode="mini"] #hl,
