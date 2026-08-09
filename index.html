@@ -39,6 +39,9 @@
        1 = ไม่หรี่เลย · 0.8 = หรี่พอสังเกต · 0.5 = จางมาก           */
     --lag-opacity: .82;
 
+    /* ตัวคูณขนาดฟอนต์ฝั่งค่าเงิน — JS ปรับเองเพื่อคุมสัดส่วนซ้าย:ขวา */
+    --fx-scale: 1;
+
     /* ---- พื้นหลัง ----
        transparent      = ทะลุเห็น wallpaper เต็ม ๆ
        rgba(0,0,0,0.35) = ทินท์ดำจาง (ค่าปัจจุบัน)
@@ -163,11 +166,11 @@
     display:flex; align-items:baseline; justify-content:space-between; gap:0.6rem;
   }
   .fx span{
-    font-size:0.78rem; letter-spacing:0.08em; font-weight:700;
+    font-size:calc(0.78rem * var(--fx-scale)); letter-spacing:0.08em; font-weight:700;
     color:var(--label); text-transform:uppercase; opacity:.8; white-space:nowrap;
   }
   .fx b{
-    font-size:1.3rem; font-weight:700; color:#fff;
+    font-size:calc(1.3rem * var(--fx-scale)); font-weight:700; color:#fff;
     min-width:5ch; text-align:right;
   }
   .fx.miss b{ color:var(--dim); font-weight:500; }
@@ -175,8 +178,8 @@
 
   /* คอลัมน์เดียว = มีที่เหลือแนวนอน ขยายตัวอักษรได้อีก */
   #fxGrid[data-cols="1"]{ gap:0.5rem 0; }
-  #fxGrid[data-cols="1"] .fx span{ font-size:0.88rem; }
-  #fxGrid[data-cols="1"] .fx b{ font-size:1.55rem; }
+  #fxGrid[data-cols="1"] .fx span{ font-size:calc(0.88rem * var(--fx-scale)); }
+  #fxGrid[data-cols="1"] .fx b{ font-size:calc(1.55rem * var(--fx-scale)); }
 
   #fxMeta{
     font-size:0.62rem; letter-spacing:0.1em; font-weight:700;
@@ -236,6 +239,10 @@
   body[data-mode="wide"] #sep{ margin:0.5rem 0 0.45rem; }
   body[data-mode="wide"] #fxGrid{ gap:0.25rem 0.5rem; }
   body[data-mode="wide"] #fxMeta{ margin-top:0.4rem; }
+
+  /* ================= override เฉพาะ split ================= */
+  /* ฝั่งซ้ายมีที่เหลือ -> ไม่ต้องซ่อน High/Low แม้กล่องจะเตี้ย (density wide) */
+  body[data-content="split"] #hl{ display:flex; }
 
   /* ================= สถานะ ================= */
   body[data-state="stale"] #crypto{ opacity:.45; }
@@ -339,6 +346,11 @@ const CONFIG = {
      "auto" = เลือกเองตามสัดส่วนกล่อง (กล่องผอมสูง -> 1 คอลัมน์)
      ใส่เลข 1 / 2 / 3 เพื่อบังคับ                                    */
   fxColumns: "auto",
+
+  /* สัดส่วนความกว้าง ซ้าย(crypto) : ขวา(ค่าเงิน) ในโหมด split
+     0.60 = ซ้ายกิน 60% · 0.50 = เท่ากัน · 0.70 = ซ้ายกิน 70%
+     ทำงานโดยปรับขนาดฟอนต์ฝั่งขวา ไม่ใช่การตัดกล่อง                */
+  splitRatio: 0.60,
 };
 
 /* อ่านโหมดจาก URL เช่น  index.html?mode=fx  */
@@ -689,6 +701,23 @@ function fit() {
   $("fxGrid").dataset.cols = cols;
 
   const html = document.documentElement;
+
+  /* --- คุมสัดส่วนซ้าย:ขวา ในโหมด split ---
+     ความกว้างฝั่งซ้าย (cw) ไม่ขึ้นกับ --fx-scale ส่วนฝั่งขวา (fw) แปรผันตรงกับมัน
+     ดังนั้นแก้สมการ cw/(cw+fw) = target ได้ค่า scale ที่ถูกต้องในก้าวเดียว     */
+  if (CONTENT === "split") {
+    const t = Math.min(0.85, Math.max(0.3, CONFIG.splitRatio));
+    for (let i = 0; i < 3; i++) {
+      const cw = $("crypto").offsetWidth, fw = $("fiat").offsetWidth;
+      if (!cw || !fw) break;
+      const cur = cw / (cw + fw);
+      if (Math.abs(cur - t) < 0.005) break;
+      let sc = parseFloat(html.style.getPropertyValue("--fx-scale")) || 1;
+      sc = sc * (cw * (1 - t)) / (t * fw);
+      html.style.setProperty("--fx-scale", Math.max(0.45, Math.min(1.8, sc)));
+    }
+  }
+
   const inner = $("inner");
   const availW = w * CONFIG.fill, availH = h * CONFIG.fill;
 
