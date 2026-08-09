@@ -161,6 +161,11 @@
   .fx.miss b{ color:var(--dim); font-weight:500; }
   .fx.lag{ opacity:.5; }              /* เรตของสกุลนี้เก่ากว่าตัวอื่น */
 
+  /* คอลัมน์เดียว = มีที่เหลือแนวตั้ง เว้นระยะให้หายใจและขยายตัวเลขได้อีก */
+  #fxGrid[data-cols="1"]{ gap:0.85rem 0; }
+  #fxGrid[data-cols="1"] .fx span{ font-size:0.66rem; }
+  #fxGrid[data-cols="1"] .fx b{ font-size:1.6rem; }
+
   #fxMeta{
     font-size:0.62rem; letter-spacing:0.1em; font-weight:700;
     color:var(--label); opacity:.65;
@@ -181,6 +186,18 @@
   /* fx = เฉพาะค่าเงิน */
   body[data-content="fx"] #crypto,
   body[data-content="fx"] #sep{ display:none; }
+
+  /* split = กล่องเดียว แต่แบ่งซ้าย(crypto) - ขวา(ค่าเงินคอลัมน์เดียว) */
+  body[data-content="split"] #inner{
+    flex-direction:row; align-items:center; gap:1.1rem;
+  }
+  body[data-content="split"] #crypto{ width:max-content; }
+  body[data-content="split"] #fiat{ width:max-content; }
+  body[data-content="split"] #sep{
+    width:1px; height:auto; align-self:stretch; margin:0;
+    background:linear-gradient(180deg,transparent,rgba(255,255,255,.16),transparent);
+  }
+  body[data-content="split"] #fxMeta{ font-size:0.55rem; margin-top:0.5rem; }
 
   /* ================= โหมด ================= */
   body[data-mode="mini"] #hl,
@@ -293,17 +310,23 @@ const CONFIG = {
   staleAfterMs: 90000,
 
   /* โหมดเนื้อหาเริ่มต้น ถ้าไม่ได้ใส่ ?mode= ใน URL
-     all     = ครบทุกอย่าง (sparkline + High/Low + ค่าเงิน)
+     all     = ครบทุกอย่าง เรียงบน-ล่าง
      compact = ตัด sparkline/High-Low/as-of ออก -> ตัวอักษรใหญ่สุด
+     split   = กล่องเดียว แบ่งซ้าย(crypto เต็ม) - ขวา(ค่าเงินคอลัมน์เดียว)
      crypto  = เฉพาะเหรียญ
      fx      = เฉพาะค่าเงิน                                        */
   defaultContent: "compact",
+
+  /* จำนวนคอลัมน์ของตารางค่าเงิน
+     "auto" = เลือกเองตามสัดส่วนกล่อง (กล่องผอมสูง -> 1 คอลัมน์)
+     ใส่เลข 1 / 2 / 3 เพื่อบังคับ                                    */
+  fxColumns: "auto",
 };
 
 /* อ่านโหมดจาก URL เช่น  index.html?mode=fx  */
 const CONTENT = (() => {
   const m = (new URLSearchParams(location.search).get("mode") || CONFIG.defaultContent).toLowerCase();
-  return ["all","compact","crypto","fx"].includes(m) ? m : "all";
+  return ["all","compact","split","crypto","fx"].includes(m) ? m : "all";
 })();
 document.body.dataset.content = CONTENT;
 /* ========================================================== */
@@ -636,9 +659,16 @@ function fit() {
   const ratio = h / w;
   body.dataset.mode = ratio < 0.30 ? "mini" : (ratio < 0.80 ? "wide" : "full");
 
-  // กล่องแคบสูง (เช่นแบ่งซ้าย-ขวา) -> ค่าเงิน 2 คอลัมน์ ไม่งั้นตัวเลขจะถูกบีบจนเล็ก
-  const cols = (CONTENT === "fx" || CONTENT === "compact") && ratio > 0.9 ? 2 : 3;
+  // จำนวนคอลัมน์ของค่าเงิน — กล่องยิ่งผอมสูง ยิ่งควรลดคอลัมน์ เพื่อให้ตัวเลขโตขึ้น
+  let cols = CONFIG.fxColumns;
+  if (cols === "auto") {
+    if (CONTENT === "split")        cols = 1;
+    else if (CONTENT === "fx")      cols = ratio > 1.4 ? 1 : (ratio > 0.9 ? 2 : 3);
+    else if (CONTENT === "compact") cols = ratio > 0.9 ? 2 : 3;
+    else                            cols = 3;
+  }
   $("fxGrid").style.gridTemplateColumns = `repeat(${cols},1fr)`;
+  $("fxGrid").dataset.cols = cols;
 
   const html = document.documentElement;
   const inner = $("inner");
