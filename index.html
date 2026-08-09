@@ -28,13 +28,29 @@
     --down: #FF6B6B;   /* สีขาลง */
     --fg:   #F2F5F3;   /* สีตัวอักษรหลัก */
     --dim:  #6B7A72;   /* สีตัวอักษรรอง */
-    --bg:   #000000;   /* พื้นหลัง — ดำสนิทเพื่อกลืนกับขอบจอ */
+
+    /* ---- พื้นหลัง: แก้บรรทัดนี้บรรทัดเดียว ----
+       transparent            = ทะลุเห็น wallpaper เต็ม ๆ
+       rgba(0,0,0,0.35)       = ทินท์ดำจาง ๆ (แนะนำ — อ่านง่ายกว่ามาก)
+       #000000                = ดำทึบแบบเดิม                             */
+    --bg: rgba(0,0,0,0.35);
+
+    /* เงาตัวอักษร — ช่วยให้อ่านออกเวลาพื้นหลังสว่าง/ลายเยอะ
+       ถ้าใช้พื้นหลังทึบ ตั้งเป็น none ได้                                */
+    --shadow: 0 0.05em 0.2em rgba(0,0,0,.95), 0 0 0.55em rgba(0,0,0,.6);
+
     --accent: var(--up);
   }
 
   *{ margin:0; padding:0; box-sizing:border-box; }
 
-  html,body{
+  html{
+    width:100%; height:100%;
+    background:transparent;      /* ต้องโปร่ง เพื่อให้ --bg เป็นตัวคุมทั้งหมด */
+    overflow:hidden;
+  }
+
+  body{
     width:100%; height:100%;
     background:var(--bg);
     overflow:hidden;
@@ -47,17 +63,24 @@
     font-variant-numeric:tabular-nums;   /* สำคัญ: กันตัวเลขขยับซ้ายขวาตอนอัปเดต */
     font-feature-settings:"tnum" 1;
     color:var(--fg);
+    text-shadow:var(--shadow);
     display:flex; align-items:center; justify-content:center;
     cursor:pointer;
   }
 
   #wrap{
     width:100%; height:100%;
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
+    text-align:center;
+  }
+
+  /* #inner สูง/กว้างตามเนื้อหาจริง — ใช้เป็นตัววัดสำหรับ auto-fit */
+  #inner{
     display:flex; flex-direction:column;
     align-items:center; justify-content:center;
     gap:0.5rem;
-    padding:1rem;
-    text-align:center;
+    width:max-content; max-width:100%;
   }
 
   /* ---------- หัวข้อ ---------- */
@@ -79,7 +102,7 @@
   /* ---------- ราคา ---------- */
   #price{
     font-size:3.6rem; font-weight:700; line-height:1;
-    letter-spacing:-0.02em;
+    letter-spacing:-0.02em; white-space:nowrap;
     transition:color .45s ease;
   }
   #price.flash-up{   color:var(--up);   }
@@ -105,11 +128,11 @@
 
   /* ---------- sparkline ---------- */
   #spark{
-    width:100%; max-width:100%; height:5rem;
+    width:13rem; height:5rem;
     margin-top:0.9rem; display:block; overflow:visible;
   }
-  #sparkLine{ fill:none; stroke:var(--accent); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; vector-effect:non-scaling-stroke; }
-  #sparkFill{ fill:var(--accent); opacity:.11; }
+  #sparkLine{ fill:none; stroke:var(--accent); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; vector-effect:non-scaling-stroke; filter:drop-shadow(0 0 3px rgba(0,0,0,.85)); }
+  #sparkFill{ fill:var(--accent); opacity:.14; }
 
   /* ---------- volume + เวลา ---------- */
   #meta{
@@ -124,21 +147,21 @@
   body[data-mode="mini"] #spark,
   body[data-mode="mini"] #meta,
   body[data-mode="mini"] #pair{ display:none; }
-  body[data-mode="mini"] #wrap{ gap:0.2rem; padding:0.4rem; }
+  body[data-mode="mini"] #inner{ gap:0.2rem; }
   body[data-mode="mini"] #price{ font-size:3.2rem; }
   body[data-mode="mini"] #change{ font-size:1.15rem; }
 
   /* wide = 4x2 : ข้อมูลครบ (มี sparkline) แต่บีบแนวตั้ง */
   body[data-mode="wide"] #meta{ display:none; }
-  body[data-mode="wide"] #wrap{ gap:0.32rem; padding:0.7rem 1rem; }
+  body[data-mode="wide"] #inner{ gap:0.32rem; }
   body[data-mode="wide"] #pair{ font-size:0.8rem; letter-spacing:0.2em; }
   body[data-mode="wide"] #price{ font-size:3.4rem; }
   body[data-mode="wide"] #change{ font-size:1.25rem; }
   body[data-mode="wide"] #hl{ font-size:0.8rem; gap:1.4rem; margin-top:0.05rem; }
-  body[data-mode="wide"] #spark{ height:2.6rem; margin-top:0.45rem; }
+  body[data-mode="wide"] #spark{ width:12rem; height:2.6rem; margin-top:0.45rem; }
 
   /* full = 4x4 : เต็มรูปแบบ */
-  body[data-mode="full"] #wrap{ gap:0.5rem; }
+  body[data-mode="full"] #inner{ gap:0.5rem; }
 
   /* ---------- สถานะโหลด / error ---------- */
   body[data-state="loading"] #price{ color:var(--dim); }
@@ -155,6 +178,7 @@
 <body data-mode="full" data-state="loading" data-conn="down">
 
 <div id="wrap">
+ <div id="inner">
   <div id="pair"><span id="dot"></span><span id="pairName">BTC / USDT</span></div>
 
   <div id="price">—</div>
@@ -178,6 +202,8 @@
     <div id="vol">—</div>
     <div id="updated">—</div>
   </div>
+
+ </div>
 </div>
 
 <div id="err">Connection lost — showing last known price</div>
@@ -196,7 +222,8 @@ const CONFIG = {
   timeZone:      "Asia/Bangkok",
   locale:        "en-US",
   staleAfterMs:  60000,         // ถ้าไม่มีข้อมูลใหม่เกินเท่านี้ = ขึ้นสถานะ stale
-  decimals:      0              // ทศนิยมของราคา (0 = $118,432 / 2 = $118,432.51)
+  decimals:      0,             // ทศนิยมของราคา (0 = $118,432 / 2 = $118,432.51)
+  fill:          0.90           // ให้เนื้อหากินพื้นที่กี่ % ของกล่อง (0.90 = เว้นขอบ 10%)
 };
 /* ========================================================== */
 
@@ -212,6 +239,7 @@ let lastUpdate = 0;
 let ws = null;
 let restTimer = null;
 let wsAlive = false;
+let fitted = false;
 
 $("pairName").textContent = CONFIG.displayName;
 
@@ -269,6 +297,9 @@ function render(d) {
 
   lastUpdate = Date.now();
   body.dataset.state = "ok";
+
+  // ราคาจริงกว้างกว่า placeholder "—" มาก → คำนวณ auto-fit ใหม่ครั้งเดียวหลังได้ข้อมูลแรก
+  if (!fitted) { fitted = true; fit(); }
 }
 
 /* ---------- REST: ดึงข้อมูล 24 ชม. ---------- */
@@ -378,24 +409,36 @@ function drawSpark(vals) {
 
 /* ---------- ปรับ layout ตามขนาดช่อง widget ---------- */
 function fit() {
-  const w = window.innerWidth || document.documentElement.clientWidth;
+  const w = window.innerWidth  || document.documentElement.clientWidth;
   const h = window.innerHeight || document.documentElement.clientHeight;
-  const ratio = h / w;                       // เลือกโหมดจากสัดส่วน ไม่ใช่ px แบบตายตัว
+  if (!w || !h) return;
 
-  //  4x1 ≈ 0.26  |  4x2 ≈ 0.52  |  4x4 ≈ 1.07
+  const ratio = h / w;                       // เลือกโหมดจากสัดส่วน ไม่ผูกกับ resolution
   const mode = ratio < 0.30 ? "mini"
              : ratio < 0.80 ? "wide"
              :                "full";
 
-  // base font คิดจาก "ทั้งกว้างและสูง" — ตัวหารคือจำนวน rem ที่ layout นั้นกินพอดี
-  const base = mode === "mini" ? Math.min(w / 16, h / 5.5)
-             : mode === "wide" ? Math.min(w / 26, h / 13.5)
-             :                   Math.min(w / 20, h / 26);
-
-  document.documentElement.style.fontSize = Math.max(5, Math.min(64, base)) + "px";
-
   const prev = body.dataset.mode;
   body.dataset.mode = mode;
+
+  /* auto-fit: วัดขนาดจริงของ #inner แล้วคำนวณ font-size ย้อนกลับ
+     ทุกอย่างในหน้าเป็นหน่วย rem → ขนาดแปรผันตรงกับ font-size
+     จึงลู่เข้าที่พอดีภายใน 2-3 รอบ ไม่ว่าจอจะตั้ง 682x2560 หรือ 1100x3840 */
+  const html   = document.documentElement;
+  const inner  = $("inner");
+  const availW = w * CONFIG.fill;
+  const availH = h * CONFIG.fill;
+
+  let f = parseFloat(html.style.fontSize) || 24;
+  for (let i = 0; i < 6; i++) {
+    html.style.fontSize = f + "px";
+    const ih = inner.offsetHeight, iw = inner.offsetWidth;
+    if (!ih || !iw) break;
+    const k = Math.min(availH / ih, availW / iw);
+    if (k > 0.99 && k < 1.01) break;
+    f = Math.max(4, Math.min(140, f * k));
+  }
+
   if (prev === "mini" && mode !== "mini") fetchSpark();
 }
 window.addEventListener("resize", fit);
