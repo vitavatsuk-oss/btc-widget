@@ -158,11 +158,13 @@
   }
   .fx b{ display:block; font-size:0.95rem; font-weight:600; margin-top:0.1em; }
   .fx.miss b{ color:var(--dim); font-weight:400; }
+  .fx.lag{ opacity:.5; }              /* เรตของสกุลนี้เก่ากว่าตัวอื่น */
 
   #fxMeta{
     font-size:0.58rem; letter-spacing:0.14em; color:var(--dim);
     text-transform:uppercase; margin-top:0.6rem;
   }
+  #fxMeta.bad{ color:var(--down); }
 
   /* ================= โหมด ================= */
   body[data-mode="mini"] #hl,
@@ -509,14 +511,37 @@ function buildFxGrid() {
   ).join("");
 }
 
-// v2 กับ v1 คืน schema ไม่เหมือนกันแน่นอนแค่ไหนยังไม่ชัด -> อ่านแบบยืดหยุ่น
+/* v2 กับ v1 คืนคนละ schema — ยืนยันจากการยิงจริง 9 ส.ค. 2569
+
+   v2: array แบน หนึ่งแถวต่อหนึ่งสกุล และ "แต่ละสกุลมีวันที่ของตัวเอง"
+       [{"date":"2026-08-09","base":"THB","quote":"CNY","rate":0.20397}, ...]
+       TWD มักช้ากว่าตัวอื่น เพราะมาจาก provider คนละชุด
+
+   v1: object เดียว ใช้ from/to (ไม่ใช่ base/symbols) และ "ไม่มี TWD"
+       {"amount":1.0,"base":"THB","date":"2026-08-07","rates":{...}}          */
 function extractRates(j) {
   if (!j) return null;
-  if (j.rates && typeof j.rates === "object") return { rates:j.rates, date:j.date };
-  if (Array.isArray(j) && j.length) {
-    const last = j[j.length-1];
-    if (last && last.rates) return { rates:last.rates, date:last.date };
+
+  // ---- v2: array แบน ----
+  if (Array.isArray(j) && j.length && j[0] && j[0].quote !== undefined) {
+    const rates = {}, dates = {};
+    for (const row of j) {
+      if (!row || !row.quote) continue;
+      rates[row.quote] = row.rate;
+      dates[row.quote] = row.date;
+    }
+    if (!Object.keys(rates).length) return null;
+    const newest = Object.values(dates).sort().pop();
+    return { rates, dates, date:newest };
   }
+
+  // ---- v1: object เดียว วันที่เดียวทั้งชุด ----
+  if (j.rates && typeof j.rates === "object") {
+    const dates = {};
+    Object.keys(j.rates).forEach(k => dates[k] = j.date);
+    return { rates:j.rates, dates, date:j.date };
+  }
+
   if (j.data) return extractRates(j.data);
   return null;
 }
@@ -525,7 +550,7 @@ async function loadFx() {
   const codes = CONFIG.fiat.map(f => f.code).join(",");
   const urls = [
     `${FRANK2}?base=THB&quotes=${codes}` + (CONFIG.fiatProvider ? `&providers=${CONFIG.fiatProvider}` : ""),
-    `${FRANK1}?base=THB&symbols=${codes}`     // fallback v1
+    `${FRANK1}?from=THB&to=${codes}`          // fallback v1 (ใช้ from/to และไม่มี TWD)
   ];
 
   for (const url of urls) {
@@ -538,17 +563,28 @@ async function loadFx() {
       return;
     } catch(e) {}
   }
+
+  // ทั้ง v2 และ v1 ล้ม — บอกบนจอเลย ไม่ต้องเปิด DevTools ถึงจะรู้
+  $("fxMeta").textContent = "FX UNAVAILABLE";
+  $("fxMeta").classList.add("bad");
 }
 
 function renderFx(got) {
+  const dates = got.dates || {};
+
   CONFIG.fiat.forEach(f => {
     const el = $("fx_" + f.code);
     if (!el) return;
     const rate = got.rates[f.code];              // = หน่วยต่างประเทศ ต่อ 1 บาท
     const b = el.querySelector("b");
-    if (!rate) { el.classList.add("miss"); b.textContent = "n/a"; return; }
+
+    if (!rate) { el.classList.add("miss"); el.classList.remove("lag"); b.textContent = "n/a"; return; }
+
     el.classList.remove("miss");
     b.textContent = (f.unit / rate).toFixed(2);  // -> บาทต่อ unit
+
+    // สกุลที่วันที่เก่ากว่าตัวอื่น (เช่น TWD) ให้หรี่ลง — บอกได้โดยไม่ต้องเพิ่มข้อความ
+    el.classList.toggle("lag", !!(dates[f.code] && got.date && dates[f.code] < got.date));
   });
 
   let d = got.date || "";
@@ -557,6 +593,7 @@ function renderFx(got) {
         { day:"numeric", month:"short", year:"numeric", timeZone:"UTC" });
   } catch(e) {}
   $("fxMeta").textContent = "MID · THB per unit · as of " + d;
+  $("fxMeta").classList.remove("bad");
   fit();
 }
 
