@@ -33,6 +33,7 @@
     --down: #FF6B6B;
     --fg:   #F2F5F3;
     --dim:  #6B7A72;
+    --label: rgba(255,255,255,.86);   /* สี label ทั้งหมด — ขาวเพื่อให้อ่านจากระยะไกล */
 
     /* ---- พื้นหลัง ----
        transparent      = ทะลุเห็น wallpaper เต็ม ๆ
@@ -86,8 +87,8 @@
   #crypto.fading{ opacity:0; }
 
   #pair{
-    font-size:0.9rem; letter-spacing:0.2em; font-weight:600;
-    color:var(--dim); text-transform:uppercase;
+    font-size:0.95rem; letter-spacing:0.16em; font-weight:700;
+    color:var(--label); text-transform:uppercase;
     display:flex; align-items:center; gap:0.5em; justify-content:center;
   }
   #dot{
@@ -118,10 +119,10 @@
 
   #hl{
     display:flex; gap:1.6rem; justify-content:center;
-    font-size:0.85rem; color:var(--dim); font-weight:500;
+    font-size:0.9rem; color:var(--label); font-weight:700;
   }
-  #hl span{ letter-spacing:0.12em; text-transform:uppercase; font-size:0.82em; }
-  #hl b{ color:var(--fg); font-weight:600; display:block; font-size:1.15em; margin-top:0.2em; }
+  #hl span{ letter-spacing:0.1em; text-transform:uppercase; font-size:0.8em; opacity:.75; }
+  #hl b{ color:#fff; font-weight:700; display:block; font-size:1.2em; margin-top:0.2em; }
 
   #spark{ width:100%; height:4.2rem; display:block; overflow:visible; }
   #sparkLine{
@@ -153,18 +154,33 @@
     gap:0.35rem 0.6rem;
   }
   .fx span{
-    display:block; font-size:0.62rem; letter-spacing:0.14em;
-    color:var(--dim); text-transform:uppercase;
+    display:block; font-size:0.72rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--label); text-transform:uppercase; opacity:.8;
   }
-  .fx b{ display:block; font-size:0.95rem; font-weight:600; margin-top:0.1em; }
-  .fx.miss b{ color:var(--dim); font-weight:400; }
+  .fx b{ display:block; font-size:1.3rem; font-weight:700; color:#fff; margin-top:0.05em; }
+  .fx.miss b{ color:var(--dim); font-weight:500; }
   .fx.lag{ opacity:.5; }              /* เรตของสกุลนี้เก่ากว่าตัวอื่น */
 
   #fxMeta{
-    font-size:0.58rem; letter-spacing:0.14em; color:var(--dim);
+    font-size:0.62rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--label); opacity:.65;
     text-transform:uppercase; margin-top:0.6rem;
   }
   #fxMeta.bad{ color:var(--down); }
+
+  /* ================= CONTENT MODE (เลือกด้วย ?mode= ใน URL) ================= */
+  /* compact = ตัด sparkline / High-Low / บรรทัด as of ออก เพื่อให้ตัวอักษรใหญ่ที่สุด */
+  body[data-content="compact"] #spark,
+  body[data-content="compact"] #hl,
+  body[data-content="compact"] #fxMeta{ display:none; }
+
+  /* crypto = เฉพาะเหรียญ (สำหรับวางคู่กับกล่อง fx) */
+  body[data-content="crypto"] #sep,
+  body[data-content="crypto"] #fiat{ display:none; }
+
+  /* fx = เฉพาะค่าเงิน */
+  body[data-content="fx"] #crypto,
+  body[data-content="fx"] #sep{ display:none; }
 
   /* ================= โหมด ================= */
   body[data-mode="mini"] #hl,
@@ -275,7 +291,21 @@ const CONFIG = {
   locale:   "en-US",
   fill:     0.90,          // เนื้อหากินพื้นที่กี่ % ของกล่อง
   staleAfterMs: 90000,
+
+  /* โหมดเนื้อหาเริ่มต้น ถ้าไม่ได้ใส่ ?mode= ใน URL
+     all     = ครบทุกอย่าง (sparkline + High/Low + ค่าเงิน)
+     compact = ตัด sparkline/High-Low/as-of ออก -> ตัวอักษรใหญ่สุด
+     crypto  = เฉพาะเหรียญ
+     fx      = เฉพาะค่าเงิน                                        */
+  defaultContent: "compact",
 };
+
+/* อ่านโหมดจาก URL เช่น  index.html?mode=fx  */
+const CONTENT = (() => {
+  const m = (new URLSearchParams(location.search).get("mode") || CONFIG.defaultContent).toLowerCase();
+  return ["all","compact","crypto","fx"].includes(m) ? m : "all";
+})();
+document.body.dataset.content = CONTENT;
 /* ========================================================== */
 
 const BINANCE = "https://api.binance.com/api/v3";
@@ -606,6 +636,10 @@ function fit() {
   const ratio = h / w;
   body.dataset.mode = ratio < 0.30 ? "mini" : (ratio < 0.80 ? "wide" : "full");
 
+  // กล่องแคบสูง (เช่นแบ่งซ้าย-ขวา) -> ค่าเงิน 2 คอลัมน์ ไม่งั้นตัวเลขจะถูกบีบจนเล็ก
+  const cols = (CONTENT === "fx" || CONTENT === "compact") && ratio > 0.9 ? 2 : 3;
+  $("fxGrid").style.gridTemplateColumns = `repeat(${cols},1fr)`;
+
   const html = document.documentElement;
   const inner = $("inner");
   const availW = w * CONFIG.fill, availH = h * CONFIG.fill;
@@ -636,13 +670,22 @@ if (window.ResizeObserver) new ResizeObserver(fit).observe(document.documentElem
   buildFxGrid();
   fit();
 
+  const wantCrypto = CONTENT !== "fx";
+  const wantFx     = CONTENT !== "crypto";
+
+  if (wantFx) {
+    loadFx();
+    setInterval(loadFx, CONFIG.fiatRefreshMs);
+  }
+
+  if (!wantCrypto) { fit(); return; }   // โหมด fx ล้วน — ไม่ต้องยิง exchange เลย
+
   await Promise.all(coins.map(probe));
   active = coins.filter(c => c.ok);
 
   if (!active.length) {
     $("pairName").textContent = "NO DATA";
     $("price").textContent = "—";
-    loadFx();
     return;
   }
 
@@ -654,9 +697,6 @@ if (window.ResizeObserver) new ResizeObserver(fit).observe(document.documentElem
   startRotation();
   connectWS();
   setInterval(pollBybit, CONFIG.bybitPollMs);
-
-  loadFx();
-  setInterval(loadFx, CONFIG.fiatRefreshMs);
 
   setInterval(() => { const c = active[idx]; if (c) loadSpark(c); }, CONFIG.sparkRefreshMs);
 
